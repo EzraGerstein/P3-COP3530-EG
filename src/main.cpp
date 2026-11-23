@@ -1,13 +1,8 @@
-#include <iostream>
-
-#include "CampusCompass.h"
-
-using namespace std;
+#include "CampusCompass.cpp"
 
 int main() {
     // initialize your main project object
     CampusCompass compass;
-
     // ingest CSV data
     compass.ParseCSV("data/edges.csv", "data/classes.csv");
 
