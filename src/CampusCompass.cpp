@@ -21,6 +21,7 @@ enum class Command {
     printShortestEdges, printStudentZone, verifySchedule
 };
 
+// map of command strings to Command enum types
 static const unordered_map<string, Command> Commands = {
     {"insert",             Command::insert},
     {"remove",             Command::remove},
@@ -108,6 +109,7 @@ bool CampusCompass::ParseCSV(const string &edges_filepath, const string &classes
         int v = stoi(location2);
         int weight = stoi(time);
 
+        // Undirected graph via bidirected edges
         adjList[u].push_back({v, weight, 1});
         adjList[v].push_back({u, weight, 1});
     }
@@ -139,11 +141,13 @@ bool CampusCompass::ParseCSV(const string &edges_filepath, const string &classes
     return true;
 }
 
+// Checks if there is extra tokens after a command
 bool hasExtraTokens(stringstream& ss) {
     string extra;
     return static_cast<bool>(ss >> extra);
 }
 
+// Parses line for command using switch case implementation
 bool CampusCompass::ParseCommand(const string &command) {
     stringstream ss(command);
     string commandType;
@@ -160,6 +164,7 @@ bool CampusCompass::ParseCommand(const string &command) {
     }
 
     switch (it->second) {
+        // Insert
         case Command::insert: {
             ss >> ws;
             if (ss.peek() != '"') {
@@ -198,6 +203,7 @@ bool CampusCompass::ParseCommand(const string &command) {
 
             return true;
         }
+        // Remove
         case Command::remove: {
             string studentID;
             if (!(ss >> studentID) || !isValidStudentID(studentID) || hasExtraTokens(ss)) {
@@ -212,6 +218,7 @@ bool CampusCompass::ParseCommand(const string &command) {
             return true;
         }
 
+        // DropClass
         case Command::dropClass: {
             string studentID, classCode;
             if (!(ss >> studentID >> classCode) || !isValidStudentID(studentID) || !isValidClassCode(classCode) || hasExtraTokens(ss)) {
@@ -226,6 +233,7 @@ bool CampusCompass::ParseCommand(const string &command) {
             return true;
         }
 
+        // ReplaceClass
         case Command::replaceClass: {
             string studentID, class1, class2;
             if (!(ss >> studentID >> class1 >> class2) || !isValidStudentID(studentID) || !isValidClassCode(class1) || !isValidClassCode(class2) || hasExtraTokens(ss)) {
@@ -240,6 +248,7 @@ bool CampusCompass::ParseCommand(const string &command) {
             return true;
         }
 
+        // RemoveClass
         case Command::removeClass: {
             string classCode;
             if (!(ss >> classCode) || !isValidClassCode(classCode) || hasExtraTokens(ss)) {
@@ -254,6 +263,7 @@ bool CampusCompass::ParseCommand(const string &command) {
             return true;
         }
 
+        // ToggleEdgesClosure
         case Command::toggleEdgesClosure: {
             int n;
             if (!(ss >> n) || n <= 0) {
@@ -282,6 +292,7 @@ bool CampusCompass::ParseCommand(const string &command) {
             return true;
         }
 
+        // CheckEdgeStatus
         case Command::checkEdgeStatus: {
             string location1, location2;
             if (!(ss >> location1 >> location2) || !isValidInteger(location1) || !isValidInteger(location2) || hasExtraTokens(ss)) {
@@ -294,6 +305,7 @@ bool CampusCompass::ParseCommand(const string &command) {
             return true;
         }
 
+        // IsConnected
         case Command::isConnected: {
             string location1, location2;
             if (!(ss >> location1 >> location2) || !isValidLocationID(location1) || !isValidLocationID(location2) || hasExtraTokens(ss)) {
@@ -308,6 +320,7 @@ bool CampusCompass::ParseCommand(const string &command) {
             return true;
         }
 
+        // PrintShortestEdges
         case Command::printShortestEdges: {
             string studentID;
             if (!(ss >> studentID) || !isValidStudentID(studentID) || hasExtraTokens(ss)) {
@@ -322,6 +335,8 @@ bool CampusCompass::ParseCommand(const string &command) {
             printShortestEdges(id);
             return true;
         }
+
+        // PrintStudentZone
         case Command::printStudentZone: {
             string studentID;
             if (!(ss >> studentID) || !isValidStudentID(studentID) || hasExtraTokens(ss)) {
@@ -338,6 +353,7 @@ bool CampusCompass::ParseCommand(const string &command) {
             return true;
         }
 
+        // VerifySchedule
         case Command::verifySchedule: {
             string studentID;
             if (!(ss >> studentID) || !isValidStudentID(studentID) || hasExtraTokens(ss)) {
@@ -364,7 +380,6 @@ bool CampusCompass::ParseCommand(const string &command) {
     return false;
 }
 
-
 bool CampusCompass::insert(const string& name, const int studentID, const int residenceLocationID, const vector<string>& classNames) {
     if (students.find(studentID) != students.end()) return false;
 
@@ -376,6 +391,8 @@ bool CampusCompass::insert(const string& name, const int studentID, const int re
 
     vector<Class> classes;
     classes.reserve(classNames.size());
+
+    // Code validation
     for (const string& code : classNames) {
         auto it = classList.find(code);
         if (it == classList.end()) return false;
@@ -391,11 +408,13 @@ bool CampusCompass::remove(const int studentID) {
 }
 
 bool CampusCompass::dropClass(const int studentID, const string& code) {
+    // Code and student validation
     if (students.find(studentID) == students.end()) return false;
     if (classList.find(code) == classList.end()) return false;
 
     vector<Class>& classes = students[studentID].studentClasses;
 
+    // Get matching class and remove it. Drop student if no classes taken
     for (size_t i = 0; i < classes.size(); i++) {
         if (classes[i].classCode == code) {
             classes.erase(classes.begin() + i);
@@ -407,15 +426,18 @@ bool CampusCompass::dropClass(const int studentID, const string& code) {
 }
 
 bool CampusCompass::replaceClass(const int studentID, const string& code1, const string& code2) {
+    // Code2 and student validation
     if (students.find(studentID) == students.end()) return false;
     if (classList.find(code2) == classList.end()) return false;
 
     vector<Class>& classes = students[studentID].studentClasses;
 
+    // Check if code2 is already a class student has
     for (const auto& c : classes) {
         if (c.classCode == code2) return false;
     }
 
+    // Check if code1 is a class student has and replace it
     for (auto& classToReplace : classes) {
         if (classToReplace.classCode == code1) {
             classToReplace = classList[code2][0];
@@ -430,10 +452,12 @@ pair<bool, int> CampusCompass::removeClass(const string& code) {
 
     vector<int> studentIDs;
     studentIDs.reserve(students.size());
+    // Split potential student removal from iterating of students
     for (const auto& [studentID, student] : students) {
         studentIDs.push_back(studentID);
     }
 
+    // Drop class of students with enrolled class and keep track
     int count = 0;
     for (const int studentID : studentIDs) {
         if (dropClass(studentID, code)) {
@@ -444,16 +468,19 @@ pair<bool, int> CampusCompass::removeClass(const string& code) {
 }
 
 bool CampusCompass::toggleEdgesClosure(const vector<int>& locations) {
+    // for loop to handle (u, v) and (v, u) flip at same time
     for (size_t i = 0; i + 1 < locations.size(); i += 2) {
         int u = locations[i];
         int v = locations[i + 1];
 
+        // Flip edge opening for (u, v)
         for (auto& edge : adjList[u]) {
             if (edge[0] == v) {
                 edge[2] = !edge[2];
                 break;
             }
         }
+        // Flip edge opening for (v, u)
         for (auto& edge : adjList[v]) {
             if (edge[0] == u) {
                 edge[2] = !edge[2];
@@ -466,10 +493,11 @@ bool CampusCompass::toggleEdgesClosure(const vector<int>& locations) {
 
 int CampusCompass::checkEdgeStatus(const int location1, const int location2) {
     const auto it = adjList.find(location1);
+    // DNE
     if (it == adjList.end()) {
         return 2;
     }
-
+    // Either 0 or 1 if open or closed
     for (const auto& [neighbor, weight, isOpen] : it->second) {
         if (neighbor == location2) {
             return isOpen == 0 ? 0 : 1;
@@ -487,6 +515,7 @@ bool CampusCompass::isConnected(const int location1, const int location2) {
     visited.insert(location1);
     frontier.push(location1);
 
+    // BFS implementation
     while (!frontier.empty()) {
         int current = frontier.front();
         frontier.pop();
@@ -496,8 +525,10 @@ bool CampusCompass::isConnected(const int location1, const int location2) {
 
         for (const auto& [neighbor, weight, isOpen] : it->second) {
             if (!isOpen) continue;
+            // Found connection
             if (neighbor == location2) return true;
 
+            // Add to visited and frontier for processing if not visited yet
             if (!visited.count(neighbor)) {
                 visited.insert(neighbor);
                 frontier.push(neighbor);
@@ -507,12 +538,12 @@ bool CampusCompass::isConnected(const int location1, const int location2) {
     return false;
 }
 
+// Helper function for printShortestEdges, printStudentZone, and verifySchedule
 pair<unordered_map<int, int>, unordered_map<int, int>> CampusCompass::runDijkstra(int startLocationID) {
+    // Needed datastructures for Dijkstra
     unordered_map<int, int> distance;
     unordered_map<int, int> parent;
-    priority_queue<pair<int, int>,
-                   vector<pair<int, int>>,
-                   greater<>> minHeap;
+    priority_queue<pair<int, int>, vector<pair<int, int>>, greater<>> minHeap;
 
     distance[startLocationID] = 0;
     minHeap.emplace(0, startLocationID);
@@ -529,6 +560,7 @@ pair<unordered_map<int, int>, unordered_map<int, int>> CampusCompass::runDijkstr
         for (const auto& [v, weight, isOpenEdge] : it->second) {
             if (!isOpenEdge) continue;
 
+            // Relax if true
             if (int newDistance = currentDistance + weight; !distance.count(v) || newDistance < distance[v]) {
                 distance[v] = newDistance;
                 parent[v] = u;
@@ -541,8 +573,10 @@ pair<unordered_map<int, int>, unordered_map<int, int>> CampusCompass::runDijkstr
 
 vector<int> CampusCompass::printShortestEdges(const int studentID) {
     const auto& student = students[studentID];
+    // Use Helper dijkstra function
     auto [distance, parent] = runDijkstra(student.residenceLocationID);
 
+    // Start to print shortest edges
     vector<Class> sortedClasses = student.studentClasses;
     sort(sortedClasses.begin(), sortedClasses.end(),
          [](const Class& a, const Class& b) {
@@ -558,21 +592,27 @@ vector<int> CampusCompass::printShortestEdges(const int studentID) {
         cout << c.classCode << ": " << time << "\n";
         shortestTimes.push_back(time);
     }
+    // For testing purposes
     return shortestTimes;
 }
 
 int CampusCompass::printStudentZone(const int studentID) {
     const auto& student = students[studentID];
     int residenceLocationID = student.residenceLocationID;
+    // Use Helper dijkstra function
     auto [distance, parent] = runDijkstra(residenceLocationID);
 
     unordered_set<int> zoneVertices;
     zoneVertices.insert(residenceLocationID);
 
+    // Use student classes
     for (const Class& c : student.studentClasses) {
+        // Check if reachable
         if (distance.count(c.locationID) && distance[c.locationID] >= 0) {
             int current = c.locationID;
+            // Go through which vertices are to be used in the zone
             while (current != residenceLocationID && parent.count(current)) {
+                // Early backtracking and insert into set
                 if (!zoneVertices.insert(current).second) {
                     break;
                 }
@@ -589,6 +629,7 @@ int CampusCompass::printStudentZone(const int studentID) {
     mstHeap.emplace(0, residenceLocationID);
     int totalCost = 0;
 
+    // Creates minimum spanning tree and increments totalCost
     while (!mstHeap.empty()) {
         auto [w, u] = mstHeap.top();
         mstHeap.pop();
@@ -617,6 +658,7 @@ vector<pair<string, bool>> CampusCompass::verifySchedule(const int studentID) {
         return {};
     }
 
+    // Sort startMinutes of both classes and tiebreaking checks too
     sort(sortedClasses.begin(), sortedClasses.end(),
          [](const Class& a, const Class& b) {
              if (a.startMinutes != b.startMinutes) {
@@ -635,9 +677,13 @@ vector<pair<string, bool>> CampusCompass::verifySchedule(const int studentID) {
         const Class& current = sortedClasses[i];
         const Class& next = sortedClasses[i + 1];
 
+        // Use Helper dijkstra function
         auto [distance, parent] = runDijkstra(current.locationID);
+
+        // Time gap between first class and second class
         const int timeGap = next.startMinutes - current.endMinutes;
 
+        // Feasible if next location is possible to go to and the timeGap is enough of a time to get there
         bool feasible = distance.count(next.locationID) && (timeGap >= distance[next.locationID]);
         results.emplace_back(current.classCode + " - " + next.classCode, feasible);
     }
