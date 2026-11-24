@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <array>
 
 using namespace std;
 
@@ -22,11 +23,11 @@ struct Class {
 
 struct Student {
     string studentName;
-    int studentID;
-    int residenceLocationID;
+    int studentID{};
+    int residenceLocationID{};
     vector<Class> studentClasses;
 
-    Student();
+    Student() = default;
 
     Student(string name, const int id, const int residenceLocationID, const vector<Class> &classes) :
         studentName(std::move(name)),

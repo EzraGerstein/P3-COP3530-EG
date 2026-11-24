@@ -1,84 +1,102 @@
 #include <catch2/catch_test_macros.hpp>
 #include <iostream>
-
-// change if you choose to use a different header name
 #include "CampusCompass.h"
 
 using namespace std;
 
-// the syntax for defining a test is below. It is important for the name to be
-// unique, but you can group multiple tests with [tags]. A test can have
-// [multiple][tags] using that syntax.
-TEST_CASE("Example Test Name - Change me!", "[tag]") {
-  // instantiate any class members that you need to test here
-  int one = 1;
+TEST_CASE("Command parser rejections", "[parser]") {
+    CampusCompass compass;
+    compass.ParseCSV("data/edges.csv", "data/classes.csv");
 
-  // anything that evaluates to false in a REQUIRE block will result in a
-  // failing test
-  REQUIRE(one == 0); // fix me!
+    // Number in name
+    REQUIRE_FALSE(compass.ParseCommand("insert \"A11y Brier\" 12345678 1 1 COP3530"));
 
-  // all REQUIRE blocks must evaluate to true for the whole test to pass
-  REQUIRE(false); // also fix me!
+    // Seven digit student ID
+    REQUIRE_FALSE(compass.ParseCommand("insert \"Ally Brier\" 1234567 1 1 COP3530"));
+
+    // Lowercase class code
+    REQUIRE_FALSE(compass.ParseCommand("insert \"Ally Brier\" 12345678 1 1 cop3530"));
+
+    // No existing student
+    REQUIRE_FALSE(compass.ParseCommand("deleteStudent 12345678"));
+
+    // Extra parameter
+    REQUIRE_FALSE(compass.ParseCommand("remove 12345678 extraParameter"));
+
+    // More than six classes
+    REQUIRE_FALSE(compass.ParseCommand("insert \"Ally Brier\" 12345678 1 7 CDA3101 CEN3031 CIS4301 CIS4360 COP3530 COT3100 MAC2311"));
 }
 
-TEST_CASE("Test 2", "[tag]") {
-  // you can also use "sections" to share setup code between tests, for example:
-  int one = 1;
+TEST_CASE("Edge cases and boundary handling", "[edge_cases]") {
+    CampusCompass compass;
+    compass.ParseCSV("data/edges.csv", "data/classes.csv");
 
-  SECTION("num is 2") {
-    int num = one + 1;
-    REQUIRE(num == 2);
-  };
+    // Large student ID
+    REQUIRE_FALSE(compass.remove(99887766));
 
-  SECTION("num is 3") {
-    int num = one + 2;
-    REQUIRE(num == 3);
-  };
+    // Insert, dropClass, and remove check
+    REQUIRE(compass.insert("Ally Brier", 12345678, 1, {"COP3530"}));
+    REQUIRE(compass.dropClass(12345678, "COP3530"));
+    REQUIRE_FALSE(compass.remove(12345678));
 
-  // each section runs the setup code independently to ensure that they don't
-  // affect each other
+    // Checks does not exist is returned
+    REQUIRE(compass.checkEdgeStatus(99999, 88888) == 2);
+
+    // Verify should return an empty schedule since only one class
+    compass.insert("Coby Davidson", 23456789, 1, {"COP3530"});
+    auto schedule = compass.verifySchedule(23456789);
+    REQUIRE(schedule.empty());
 }
 
-// Refer to Canvas for a list of required tests. 
-// We encourage you to write more than required to ensure proper functionality, but only the ones on Canvas will be graded.
+TEST_CASE("Class adjustments and bulk removal operations", "[operations]") {
+    CampusCompass compass;
+    compass.ParseCSV("data/edges.csv", "data/classes.csv");
 
-// See the following for an example of how to easily test your output.
-// Note that while this works, I recommend also creating plenty of unit tests for particular functions within your code.
-// This pattern should only be used for final, end-to-end testing.
+    // Insert three students
+    compass.insert("Ally Brier", 12345678, 1, {"COP3530", "CDA3101"});
+    compass.insert("Coby Davidson", 23456789, 1, {"COP3530", "MAC2311"});
+    compass.insert("Ethan Gold", 87654321, 1, {"COP3530"});
 
-// This uses C++ "raw strings" and assumes your CampusCompass outputs a string with
-//   the same thing you print.
-TEST_CASE("Example CampusCompass Output Test", "[flag]") {
-  // the following is a "raw string" - you can write the exact input (without
-  //   any indentation!) and it should work as expected
-  // this is based on the input and output of the first public test case
-  string input = R"(6
-insert "Student A" 10000001 1 1 COP3502
-insert "Student B" 10000002 1 1 COP3502
-insert "Student C" 10000003 1 2 COP3502 MAC2311
-dropClass 10000001 COP3502
-remove 10000001
-removeClass COP3502
-)";
+    // Ally class replace checks
+    REQUIRE_FALSE(compass.replaceClass(12345678, "COP3502", "MAC2311"));
+    REQUIRE_FALSE(compass.replaceClass(12345678, "COP3530", "CDA3101"));
+    REQUIRE(compass.replaceClass(12345678, "COP3530", "MAC2311"));
 
-  string expectedOutput = R"(successful
-successful
-successful
-successful
-unsuccessful
-2
-)";
+    // Ally drop class checks
+    REQUIRE_FALSE(compass.dropClass(12345678, "COP3530"));
+    REQUIRE(compass.dropClass(12345678, "MAC2311"));
 
-  string actualOutput;
+    // COP3530 remove class checks
+    auto [success, count] = compass.removeClass("COP3530");
+    REQUIRE(success);
+    REQUIRE(count == 2);
 
-  // somehow pass your input into your CampusCompass and parse it to call the
-  // correct functions, for example:
-  /*
-  CampusCompass c;
-  c.parseInput(input)
-  // this would be some function that sends the output from your class into a string for use in testing
-  actualOutput = c.getStringRepresentation()
-  */
+    // Coby and Ethan remove checks
+    REQUIRE_FALSE(compass.remove(87654321));
+    REQUIRE(compass.remove(23456789));
+}
 
-  REQUIRE(actualOutput == expectedOutput);
+TEST_CASE("Shortest edges path reachability with edge closures", "[routing]") {
+    CampusCompass compass;
+    compass.ParseCSV("data/edges.csv", "data/classes.csv");
+
+    // Insert Ally Brier
+    compass.insert("Ally Brier", 12345678, 1, {"COP3530"});
+
+    // Verify reachability
+    vector<int> times = compass.printShortestEdges(12345678);
+    REQUIRE_FALSE(times.empty());
+    REQUIRE(times[0] != -1);
+
+    // Close three edges
+    compass.toggleEdgesClosure({1, 4, 1, 2, 1, 50});
+
+    // Verify unreachability
+    times = compass.printShortestEdges(12345678);
+    REQUIRE(times[0] == -1);
+
+    // Verify edge reopening and reachability
+    compass.toggleEdgesClosure({1, 4, 1, 2, 1, 50});
+    times = compass.printShortestEdges(12345678);
+    REQUIRE(times[0] != -1);
 }

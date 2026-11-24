@@ -396,7 +396,7 @@ bool CampusCompass::dropClass(const int studentID, const string& code) {
 
     vector<Class>& classes = students[studentID].studentClasses;
 
-    for (int i = 0; i < classes.size(); i++) {
+    for (size_t i = 0; i < classes.size(); i++) {
         if (classes[i].classCode == code) {
             classes.erase(classes.begin() + i);
             if (classes.empty()) remove(studentID);
@@ -444,7 +444,7 @@ pair<bool, int> CampusCompass::removeClass(const string& code) {
 }
 
 bool CampusCompass::toggleEdgesClosure(const vector<int>& locations) {
-    for (int i = 0; i + 1 < locations.size(); i += 2) {
+    for (size_t i = 0; i + 1 < locations.size(); i += 2) {
         int u = locations[i];
         int v = locations[i + 1];
 
