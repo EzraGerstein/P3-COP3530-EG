@@ -1,11 +1,14 @@
 #include "CampusCompass.h"
 
-#include <iostream>
+#include <array>
 #include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <queue>
+#include <regex>
 #include <sstream>
 #include <unordered_set>
-#include <iomanip>
-#include <queue>
+
 
 const regex validID("^[0-9]{8}$");
 const regex validName("^(?=.*[a-zA-Z])[a-zA-Z ]+$");

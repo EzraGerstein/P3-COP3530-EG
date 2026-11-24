@@ -1,4 +1,5 @@
-#include "CampusCompass.cpp"
+#include "CampusCompass.h"
+#include <iostream>
 
 int main() {
     // initialize your main project object
