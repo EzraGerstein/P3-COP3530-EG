@@ -5,6 +5,7 @@
 #include <sstream>
 #include <unordered_set>
 #include <iomanip>
+#include <queue>
 
 const regex validID("^[0-9]{8}$");
 const regex validName("^(?=.*[a-zA-Z])[a-zA-Z ]+$");
@@ -81,14 +82,14 @@ bool CampusCompass::ParseCSV(const string &edges_filepath, const string &classes
     ifstream edgeFile(edges_filepath);
     ifstream classFile(classes_filepath);
 
-    if (!edgeFile.is_open()) return false;
-    if (!classFile.is_open()) return false;
+    if (!edgeFile.is_open() || !classFile.is_open()) return false;
 
     string line;
 
     // Remove header
     if (getline(edgeFile, line)) {}
     while (getline(edgeFile, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
         if (line.empty() || line[0] == '/') continue;
 
         stringstream ssEdge(line);
@@ -104,13 +105,14 @@ bool CampusCompass::ParseCSV(const string &edges_filepath, const string &classes
         int v = stoi(location2);
         int weight = stoi(time);
 
-        adjList[u].emplace_back(v, weight);
-        adjList[v].emplace_back(u, weight);
+        adjList[u].push_back({v, weight, 1});
+        adjList[v].push_back({u, weight, 1});
     }
 
     // Remove header
     if (getline(classFile, line)) {}
     while (getline(classFile, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
         if (line.empty() || line[0] == '/') continue;
 
         stringstream ssClass(line);
@@ -125,7 +127,11 @@ bool CampusCompass::ParseCSV(const string &edges_filepath, const string &classes
         int startMin = parseTimeToMinutes(startTime);
         int endMin = parseTimeToMinutes(endTime);
 
-        classList[locationID].emplace_back(code, startMin, endMin);
+        if (adjList.find(locationID) == adjList.end()) {
+            adjList[locationID] = {};
+        }
+
+        classList[code].emplace_back(code, locationID, startMin, endMin);
     }
     return true;
 }
@@ -139,109 +145,471 @@ bool CampusCompass::ParseCommand(const string &command) {
     stringstream ss(command);
     string commandType;
 
-    if (!(ss >> commandType)) return false;
+    if (!(ss >> commandType)) {
+        cout << "unsuccessful\n";
+        return false;
+    }
 
     auto it = Commands.find(commandType);
-    if (it == Commands.end()) return false;
+    if (it == Commands.end()) {
+        cout << "unsuccessful\n";
+        return false;
+    }
 
     switch (it->second) {
         case Command::insert: {
             ss >> ws;
-            if (ss.peek() != '"') return false;
+            if (ss.peek() != '"') {
+                cout << "unsuccessful\n";
+                return false;
+            }
 
             string name, studentID, residenceLocationID;
             int n;
-            if (!(ss >> quoted(name) >> studentID >> residenceLocationID >> n)) return false;
+            if (!(ss >> quoted(name) >> studentID >> residenceLocationID >> n)) {
+                cout << "unsuccessful\n";
+                return false;
+            }
             if (!isValidName(name) || !isValidStudentID(studentID) || !isValidLocationID(residenceLocationID) || n <= 0 || n > 6) {
+                cout << "unsuccessful\n";
                 return false;
             }
 
             vector<string> classes(n);
             for (int i = 0; i < n; ++i) {
-                if (!(ss >> classes[i]) || !isValidClassCode(classes[i])) return false;
+                if (!(ss >> classes[i]) || !isValidClassCode(classes[i])) {
+                    cout << "unsuccessful\n";
+                    return false;
+                }
             }
-            if (hasExtraTokens(ss)) return false;
+            if (hasExtraTokens(ss)) {
+                cout << "unsuccessful\n";
+                return false;
+            }
 
-            insert(name, studentID, residenceLocationID, classes);
+            if (insert(name, stoi(studentID), stoi(residenceLocationID), classes)) {
+                cout << "successful\n";
+            } else {
+                cout << "unsuccessful\n";
+            }
+
             return true;
         }
-
-        case Command::removeClass: {
-            string classCode;
-            if (!(ss >> classCode) || !isValidClassCode(classCode) || hasExtraTokens(ss)) return false;
-
-            removeClass(classCode);
-            return true;
-        }
-
-        case Command::remove:
-        case Command::printShortestEdges:
-        case Command::printStudentZone:
-        case Command::verifySchedule: {
+        case Command::remove: {
             string studentID;
-            if (!(ss >> studentID) || !isValidStudentID(studentID) || hasExtraTokens(ss)) return false;
-
-            if (it->second == Command::remove)             remove(studentID);
-            if (it->second == Command::printShortestEdges) printShortestEdges(studentID);
-            if (it->second == Command::printStudentZone)   printStudentZone(studentID);
-            if (it->second == Command::verifySchedule)     verifySchedule(studentID);
+            if (!(ss >> studentID) || !isValidStudentID(studentID) || hasExtraTokens(ss)) {
+                cout << "unsuccessful\n";
+                return false;
+            }
+            if (remove(stoi(studentID))) {
+                cout << "successful\n";
+            } else {
+                cout << "unsuccessful\n";
+            }
             return true;
         }
 
         case Command::dropClass: {
             string studentID, classCode;
-            if (!(ss >> studentID >> classCode)) return false;
-            if (!isValidStudentID(studentID) || !isValidClassCode(classCode) || hasExtraTokens(ss)) return false;
-
-            dropClass(studentID, classCode);
+            if (!(ss >> studentID >> classCode) || !isValidStudentID(studentID) || !isValidClassCode(classCode) || hasExtraTokens(ss)) {
+                cout << "unsuccessful\n";
+                return false;
+            }
+            if (dropClass(stoi(studentID), classCode)) {
+                cout << "successful\n";
+            } else {
+                cout << "unsuccessful\n";
+            }
             return true;
         }
 
         case Command::replaceClass: {
-
             string studentID, class1, class2;
-            if (!(ss >> studentID >> class1 >> class2)) return false;
-            if (!isValidStudentID(studentID) || !isValidClassCode(class1) || !isValidClassCode(class2) || hasExtraTokens(ss)) {
+            if (!(ss >> studentID >> class1 >> class2) || !isValidStudentID(studentID) || !isValidClassCode(class1) || !isValidClassCode(class2) || hasExtraTokens(ss)) {
+                cout << "unsuccessful\n";
                 return false;
             }
+            if (replaceClass(stoi(studentID), class1, class2)) {
+                cout << "successful\n";
+            } else {
+                cout << "unsuccessful\n";
+            }
+            return true;
+        }
 
-            replaceClass(studentID, class1, class2);
+        case Command::removeClass: {
+            string classCode;
+            if (!(ss >> classCode) || !isValidClassCode(classCode) || hasExtraTokens(ss)) {
+                cout << "unsuccessful\n";
+                return false;
+            }
+            if (auto [success, count] = removeClass(classCode); success) {
+                cout << count << "\n";
+            } else {
+                cout << "unsuccessful\n";
+            }
             return true;
         }
 
         case Command::toggleEdgesClosure: {
             int n;
-            if (!(ss >> n) || n <= 0) return false;
-
-            vector<string> locationIDs(n);
-            for (int i = 0; i < 2 * n; i++) {
-                string id;
-                if (!(ss >> id) || !isValidLocationID(id)) return false;
-                locationIDs.push_back(id);
+            if (!(ss >> n) || n <= 0) {
+                cout << "unsuccessful\n";
+                return false;
             }
-            if (hasExtraTokens(ss)) return false;
+
+            vector<int> locationIDs;
+            locationIDs.reserve(2 * n);
+            for (int i = 0; i < 2 * n; ++i) {
+                string id;
+                if (!(ss >> id) || !isValidLocationID(id)) {
+                    cout << "unsuccessful\n";
+                    return false;
+                }
+                locationIDs.push_back(stoi(id));
+            }
+
+            if (hasExtraTokens(ss)) {
+                cout << "unsuccessful\n";
+                return false;
+            }
 
             toggleEdgesClosure(locationIDs);
+            cout << "successful\n";
             return true;
         }
 
         case Command::checkEdgeStatus: {
             string location1, location2;
-            if (!(ss >> location1 >> location2)) return false;
-            if (!isValidInteger(location1) || !isValidInteger(location2) || hasExtraTokens(ss)) return false;
-
-            checkEdgeStatus(location1, location2);
+            if (!(ss >> location1 >> location2) || !isValidInteger(location1) || !isValidInteger(location2) || hasExtraTokens(ss)) {
+                cout << "unsuccessful\n";
+                return false;
+            }
+            if (int status = checkEdgeStatus(stoi(location1), stoi(location2)); status == 1) cout << "open\n";
+            else if (status == 0) cout << "closed\n";
+            else cout << "DNE\n";
             return true;
         }
 
         case Command::isConnected: {
             string location1, location2;
-            if (!(ss >> location1 >> location2)) return false;
-            if (!isValidLocationID(location1) || !isValidLocationID(location2) || hasExtraTokens(ss)) return false;
+            if (!(ss >> location1 >> location2) || !isValidLocationID(location1) || !isValidLocationID(location2) || hasExtraTokens(ss)) {
+                cout << "unsuccessful\n";
+                return false;
+            }
+            if (isConnected(stoi(location1), stoi(location2))) {
+                cout << "successful\n";
+            } else {
+                cout << "unsuccessful\n";
+            }
+            return true;
+        }
 
-            isConnected(location1, location2);
+        case Command::printShortestEdges: {
+            string studentID;
+            if (!(ss >> studentID) || !isValidStudentID(studentID) || hasExtraTokens(ss)) {
+                cout << "unsuccessful\n";
+                return false;
+            }
+            int id = stoi(studentID);
+            if (students.find(id) == students.end()) {
+                cout << "unsuccessful\n";
+                return false;
+            }
+            printShortestEdges(id);
+            return true;
+        }
+        case Command::printStudentZone: {
+            string studentID;
+            if (!(ss >> studentID) || !isValidStudentID(studentID) || hasExtraTokens(ss)) {
+                cout << "unsuccessful\n";
+                return false;
+            }
+            int id = stoi(studentID);
+            if (students.find(id) == students.end()) {
+                cout << "unsuccessful\n";
+                return false;
+            }
+            int cost = printStudentZone(id);
+            cout << "Student Zone Cost For " << students[id].studentName << ": " << cost << "\n";
+            return true;
+        }
+
+        case Command::verifySchedule: {
+            string studentID;
+            if (!(ss >> studentID) || !isValidStudentID(studentID) || hasExtraTokens(ss)) {
+                cout << "unsuccessful\n";
+                return false;
+            }
+            int id = stoi(studentID);
+            if (students.find(id) == students.end() || students[id].studentClasses.size() <= 1) {
+                cout << "unsuccessful\n";
+                return false;
+            }
+            auto res = verifySchedule(id);
+            cout << "Schedule Check for " << students[id].studentName << ":\n";
+            for (const auto& [pairName, feasible] : res) {
+                cout << pairName << ": " << (feasible ? "successful" : "unsuccessful") << "\n";
+            }
+            return true;
+        }
+
+        default:
+            break;
+    }
+    cout << "unsuccessful\n";
+    return false;
+}
+
+
+bool CampusCompass::insert(const string& name, const int studentID, const int residenceLocationID, const vector<string>& classNames) {
+    if (students.find(studentID) != students.end()) return false;
+    vector<Class> classes;
+    classes.reserve(classNames.size());
+    for (const string& code : classNames) {
+        auto it = classList.find(code);
+        if (it == classList.end()) return false;
+        classes.push_back(it->second[0]);
+    }
+    Student student(name, studentID, residenceLocationID, classes);
+    students.emplace(studentID, student);
+    return true;
+}
+
+bool CampusCompass::remove(const int studentID) {
+    return students.erase(studentID);
+}
+
+bool CampusCompass::dropClass(const int studentID, const string& code) {
+    if (students.find(studentID) == students.end()) return false;
+    if (classList.find(code) == classList.end()) return false;
+
+    vector<Class>& classes = students[studentID].studentClasses;
+
+    for (int i = 0; i < classes.size(); i++) {
+        if (classes[i].classCode == code) {
+            classes.erase(classes.begin() + i);
+            if (classes.empty()) remove(studentID);
             return true;
         }
     }
     return false;
+}
+
+bool CampusCompass::replaceClass(const int studentID, const string& code1, const string& code2) {
+    if (students.find(studentID) == students.end()) return false;
+    if (classList.find(code2) == classList.end()) return false;
+
+    vector<Class>& classes = students[studentID].studentClasses;
+    for (auto & classToReplace : classes) {
+        if (classToReplace.classCode == code2) return false;
+        if (classToReplace.classCode == code1) {
+            classToReplace = classList[code2][0];
+            return true;
+        }
+    }
+    return false;
+}
+
+pair<bool, int> CampusCompass::removeClass(const string& code) {
+    bool result = false;
+    int count = 0;
+    if (classList.find(code) == classList.end()) return {false, 0};
+    for (auto& [studentID, student] : students) {
+        if (dropClass(studentID, code)) {
+            count++;
+            result = true;
+        }
+    }
+    return {result, count};
+}
+
+bool CampusCompass::toggleEdgesClosure(const vector<int>& locations) {
+    for (int i = 0; i + 1 < locations.size(); i += 2) {
+        int u = locations[i];
+        int v = locations[i + 1];
+
+        for (auto& edge : adjList[u]) {
+            if (edge[0] == v) {
+                edge[2] = !edge[2];
+                break;
+            }
+        }
+        for (auto& edge : adjList[v]) {
+            if (edge[0] == u) {
+                edge[2] = !edge[2];
+                break;
+            }
+        }
+    }
+    return true;
+}
+
+int CampusCompass::checkEdgeStatus(const int location1, const int location2) {
+    for (const auto& [neighbor, weight, isOpen]: adjList[location1]) {
+        if (neighbor == location2) {
+            if (isOpen == 0) {
+                return 0;
+            }
+            return 1;
+        }
+    }
+    return 2;
+}
+
+bool CampusCompass::isConnected(const int location1, const int location2) {
+    if (location1 == location2) return true;
+
+    queue<int> frontier;
+    unordered_set<int> visited;
+
+    visited.insert(location1);
+    frontier.push(location1);
+
+    while (!frontier.empty()) {
+        int current = frontier.front();
+        frontier.pop();
+
+        auto it = adjList.find(current);
+        if (it == adjList.end()) continue;
+
+        for (const auto& [neighbor, weight, isOpen] : it->second) {
+            if (!isOpen) continue;
+            if (neighbor == location2) return true;
+
+            if (!visited.count(neighbor)) {
+                visited.insert(neighbor);
+                frontier.push(neighbor);
+            }
+        }
+    }
+    return false;
+}
+
+pair<unordered_map<int, int>, unordered_map<int, int>> CampusCompass::runDijkstra(int startLocationID) {
+    unordered_map<int, int> distance;
+    unordered_map<int, int> parent;
+    priority_queue<pair<int, int>,
+                   vector<pair<int, int>>,
+                   greater<>> minHeap;
+
+    distance[startLocationID] = 0;
+    minHeap.emplace(0, startLocationID);
+
+    while (!minHeap.empty()) {
+        auto [currentDistance, u] = minHeap.top();
+        minHeap.pop();
+
+        if (currentDistance > distance[u]) continue;
+
+        auto it = adjList.find(u);
+        if (it == adjList.end()) continue;
+
+        for (const auto& [v, weight, isOpenEdge] : it->second) {
+            if (!isOpenEdge) continue;
+
+            if (int newDistance = currentDistance + weight; !distance.count(v) || newDistance < distance[v]) {
+                distance[v] = newDistance;
+                parent[v] = u;
+                minHeap.emplace(newDistance, v);
+            }
+        }
+    }
+    return {distance, parent};
+}
+
+vector<int> CampusCompass::printShortestEdges(const int studentID) {
+    const auto& student = students[studentID];
+    auto [distance, parent] = runDijkstra(student.residenceLocationID);
+
+    vector<Class> sortedClasses = student.studentClasses;
+    sort(sortedClasses.begin(), sortedClasses.end(),
+         [](const Class& a, const Class& b) {
+             return a.classCode < b.classCode;
+         });
+
+    vector<int> shortestTimes;
+    shortestTimes.reserve(sortedClasses.size());
+
+    for (const Class& c : sortedClasses) {
+        int time = distance.count(c.locationID) ? distance[c.locationID] : -1;
+        shortestTimes.push_back(time);
+    }
+    return shortestTimes;
+}
+
+int CampusCompass::printStudentZone(const int studentID) {
+    const auto& student = students[studentID];
+    int residenceLocationID = student.residenceLocationID;
+    auto [distance, parent] = runDijkstra(residenceLocationID);
+
+    unordered_set<int> zoneVertices;
+    zoneVertices.insert(residenceLocationID);
+
+    for (const Class& c : student.studentClasses) {
+        if (distance.count(c.locationID)) {
+            int current = c.locationID;
+            while (current != residenceLocationID) {
+                zoneVertices.insert(current);
+                current = parent[current];
+            }
+        }
+    }
+
+    unordered_set<int> inMST;
+    priority_queue<pair<int, int>,
+                   vector<pair<int, int>>,
+                   greater<>> mstHeap;
+
+    mstHeap.emplace(0, residenceLocationID);
+    int totalCost = 0;
+
+    while (!mstHeap.empty()) {
+        auto [w, u] = mstHeap.top();
+        mstHeap.pop();
+
+        if (inMST.count(u)) continue;
+        inMST.insert(u);
+        totalCost += w;
+
+        auto it = adjList.find(u);
+        if (it == adjList.end()) continue;
+
+        for (const auto& [v, weight, isOpenEdge] : it->second) {
+            if (isOpenEdge && zoneVertices.count(v) && !inMST.count(v)) {
+                mstHeap.emplace(weight, v);
+            }
+        }
+    }
+    return totalCost;
+}
+
+vector<pair<string, bool>> CampusCompass::verifySchedule(const int studentID) {
+    const auto& student = students[studentID];
+    vector<Class> sortedClasses = student.studentClasses;
+
+    if (sortedClasses.size() <= 1) {
+        return {};
+    }
+
+    sort(sortedClasses.begin(), sortedClasses.end(),
+         [](const Class& a, const Class& b) {
+             return a.startMinutes < b.startMinutes;
+         });
+
+    vector<pair<string, bool>> results;
+    results.reserve(sortedClasses.size() - 1);
+
+    for (size_t i = 0; i + 1 < sortedClasses.size(); ++i) {
+        const Class& current = sortedClasses[i];
+        const Class& next = sortedClasses[i + 1];
+
+        auto [distance, parent] = runDijkstra(current.locationID);
+        const int timeGap = next.startMinutes - current.endMinutes;
+
+        bool feasible = distance.count(next.locationID) && (timeGap >= distance[next.locationID]);
+        results.emplace_back(current.classCode + " - " + next.classCode, feasible);
+    }
+
+    return results;
 }

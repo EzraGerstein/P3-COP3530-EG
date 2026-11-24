@@ -5,30 +5,42 @@
 #include <vector>
 #include <unordered_map>
 #include <regex>
+#include <array>
 
 using namespace std;
 
 struct Class {
     string classCode;
+    int locationID{};
     int startMinutes{};
     int endMinutes{};
 
-    Class(string code, const int startMin, const int endMin) :
+    Class(string code, const int locationID, const int startMinutes, const int endMinutes) :
         classCode(std::move(code)),
-        startMinutes(startMin),
-        endMinutes(endMin) {}
+        locationID(locationID),
+        startMinutes(startMinutes),
+        endMinutes(endMinutes) {}
 };
 
 struct Student {
-    string name;
-    string id;
-    string residenceLocationID;
-    vector<string> classes;
+    string studentName;
+    int studentID;
+    int residenceLocationID;
+    vector<Class> studentClasses;
+
+    Student();
+
+    Student(string name, const int id, const int residenceLocationID, const vector<Class> &classes) :
+        studentName(std::move(name)),
+        studentID(id),
+        residenceLocationID(residenceLocationID),
+        studentClasses(classes) {}
 };
 
 class CampusCompass {
-    unordered_map<int, vector<pair<int, int>>> adjList;
-    unordered_map<int, vector<Class>> classList;
+    unordered_map<int, Student> students;
+    unordered_map<int, vector<array<int, 3>>> adjList;
+    unordered_map<string, vector<Class>> classList;
 public:
     CampusCompass();
     static bool isValidStudentID(const string &id);
@@ -38,19 +50,19 @@ public:
     bool isValidLocationID(const string &id);
     static int parseTimeToMinutes(const string& time);
     bool ParseCSV(const string &edges_filepath, const string &classes_filepath);
-    static bool ParseCommand(const string &command);
+    bool ParseCommand(const string &command);
+    bool insert(const string& name, int studentID, int residenceLocationID, const vector<string>& classNames);
+    bool remove(int studentID);
+    bool dropClass(int studentID, const string& code);
+    bool replaceClass(int studentID, const string& code1, const string& code2);
+    pair<bool, int> removeClass(const string& code);
+    bool toggleEdgesClosure(const vector<int>& locations);
+    int checkEdgeStatus(int location1, int location2);
+    bool isConnected(int location1, int location2);
 
-    // TODO not done yet
-    bool insert(string name, string id, string locationID, vector<string> classes);
-    bool remove(string id);
-    bool dropClass(string id, int code);
-    bool replaceClass(string id, string class1, string class2);
-    bool removeClass(int code);
-    bool toggleEdgesClosure(vector<string> locations);
-    bool checkEdgeStatus(string loc1, string loc2);
-    bool isConnected(string loc1, string loc2);
-    void printShortestEdges(int id);
-    void printStudentZone(int id);
-    void verifySchedule(int ID);
+    pair<unordered_map<int, int>, unordered_map<int, int>> runDijkstra(int startLocationID);
+    vector<int> printShortestEdges(int studentID);
+    int printStudentZone(int studentID);
+    vector<pair<string, bool>> verifySchedule(int studentID);
 
 };
