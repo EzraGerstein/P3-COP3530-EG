@@ -364,6 +364,13 @@ bool CampusCompass::ParseCommand(const string &command) {
 
 bool CampusCompass::insert(const string& name, const int studentID, const int residenceLocationID, const vector<string>& classNames) {
     if (students.find(studentID) != students.end()) return false;
+
+    // Duplicate check
+    unordered_set<string> seen;
+    for (const string& code : classNames) {
+        if (!seen.insert(code).second) return false;
+    }
+
     vector<Class> classes;
     classes.reserve(classNames.size());
     for (const string& code : classNames) {
@@ -401,8 +408,12 @@ bool CampusCompass::replaceClass(const int studentID, const string& code1, const
     if (classList.find(code2) == classList.end()) return false;
 
     vector<Class>& classes = students[studentID].studentClasses;
-    for (auto & classToReplace : classes) {
-        if (classToReplace.classCode == code2) return false;
+
+    for (const auto& c : classes) {
+        if (c.classCode == code2) return false;
+    }
+
+    for (auto& classToReplace : classes) {
         if (classToReplace.classCode == code1) {
             classToReplace = classList[code2][0];
             return true;
@@ -412,16 +423,21 @@ bool CampusCompass::replaceClass(const int studentID, const string& code1, const
 }
 
 pair<bool, int> CampusCompass::removeClass(const string& code) {
-    bool result = false;
-    int count = 0;
     if (classList.find(code) == classList.end()) return {false, 0};
-    for (auto& [studentID, student] : students) {
+
+    vector<int> studentIDs;
+    studentIDs.reserve(students.size());
+    for (const auto& [studentID, student] : students) {
+        studentIDs.push_back(studentID);
+    }
+
+    int count = 0;
+    for (const int studentID : studentIDs) {
         if (dropClass(studentID, code)) {
             count++;
-            result = true;
         }
     }
-    return {result, count};
+    return {count > 0, count};
 }
 
 bool CampusCompass::toggleEdgesClosure(const vector<int>& locations) {
@@ -446,12 +462,14 @@ bool CampusCompass::toggleEdgesClosure(const vector<int>& locations) {
 }
 
 int CampusCompass::checkEdgeStatus(const int location1, const int location2) {
-    for (const auto& [neighbor, weight, isOpen]: adjList[location1]) {
+    const auto it = adjList.find(location1);
+    if (it == adjList.end()) {
+        return 2;
+    }
+
+    for (const auto& [neighbor, weight, isOpen] : it->second) {
         if (neighbor == location2) {
-            if (isOpen == 0) {
-                return 0;
-            }
-            return 1;
+            return isOpen == 0 ? 0 : 1;
         }
     }
     return 2;
@@ -527,12 +545,14 @@ vector<int> CampusCompass::printShortestEdges(const int studentID) {
          [](const Class& a, const Class& b) {
              return a.classCode < b.classCode;
          });
+    cout << "Time For Shortest Edges: " << student.studentName << "\n";
 
     vector<int> shortestTimes;
     shortestTimes.reserve(sortedClasses.size());
 
     for (const Class& c : sortedClasses) {
         int time = distance.count(c.locationID) ? distance[c.locationID] : -1;
+        cout << c.classCode << ": " << time << "\n";
         shortestTimes.push_back(time);
     }
     return shortestTimes;
@@ -547,10 +567,12 @@ int CampusCompass::printStudentZone(const int studentID) {
     zoneVertices.insert(residenceLocationID);
 
     for (const Class& c : student.studentClasses) {
-        if (distance.count(c.locationID)) {
+        if (distance.count(c.locationID) && distance[c.locationID] >= 0) {
             int current = c.locationID;
-            while (current != residenceLocationID) {
-                zoneVertices.insert(current);
+            while (current != residenceLocationID && parent.count(current)) {
+                if (!zoneVertices.insert(current).second) {
+                    break;
+                }
                 current = parent[current];
             }
         }
@@ -594,7 +616,13 @@ vector<pair<string, bool>> CampusCompass::verifySchedule(const int studentID) {
 
     sort(sortedClasses.begin(), sortedClasses.end(),
          [](const Class& a, const Class& b) {
-             return a.startMinutes < b.startMinutes;
+             if (a.startMinutes != b.startMinutes) {
+                 return a.startMinutes < b.startMinutes;
+             }
+             if (a.endMinutes != b.endMinutes) {
+                 return a.endMinutes < b.endMinutes;
+             }
+             return a.classCode < b.classCode;
          });
 
     vector<pair<string, bool>> results;
